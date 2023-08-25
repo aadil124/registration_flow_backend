@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors"; //unable all the requests which are coming from different different domain
 import mongoose from "mongoose"; // to provide high level abstraction
 import dotenv from "dotenv";
+import bcrypt from "bcrypt";
 
 dotenv.config(); // load the environment variables from .env file
 const PORT = process.env.PORT;
@@ -40,47 +41,94 @@ app.get("/", (req, res) => {
 
 //create a route for Login based on User
 
-app.post("/login", (req, res) => {
-  const { email, password } = req.body;
+// app.post("/login", (req, res) => {
+//   const { email, password } = req.body;
 
-  User.findOne({ email: email }, (err, user) => {
+//   User.findOne({ email: email }, (err, user) => {
+//     if (user) {
+//       if (password === user.password) {
+//         res.send({ message: "Login Successfully", user: user });
+//       } else {
+//         res.send({ message: "Password is not matched" });
+//       }
+//     } else {
+//       res.send({ message: "User is not Found" });
+//     }
+//   });
+// });
+
+//Implement bcrypt algorithm to compare password and hashedpassword
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.findOne({ email: email });
     if (user) {
-      if (password === user.password) {
-        res.send({ message: "Login Successfully", user: user });
+      //first do comparison with hashpassowrd
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (isPasswordValid) {
+        res.send({ message: "Login Successful", user: user });
       } else {
-        res.send({ message: "Password is not matched" });
+        res.send({ message: "Password is not matched.." });
       }
     } else {
-      res.send({ message: "User is not Found" });
+      res.send({ message: "User is not found" });
     }
-  });
+  } catch (error) {
+    res.send({ message: "An error occurred in login" });
+  }
 });
 
 //create a route for registration
 
-app.post("/register", (req, res) => {
+// app.post("/register", (req, res) => {
+//   const { name, email, password } = req.body;
+
+//   User.findOne({ email: email }, (err, user) => {
+//     if (user) {
+//       res.send({ message: "User Already Registered" });
+//     } else {
+//       //create a new user instance object with 3 details
+//       const user = new User({
+//         name: name,
+//         email: email,
+//         password: password,
+//       });
+//       user.save((err) => {
+//         if (err) {
+//           res.send(err);
+//         } else {
+//           res.send({ message: "User Registered Successfully" });
+//         }
+//       });
+//     }
+//   });
+// });
+
+//code for register route with bcrypt
+app.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
 
-  User.findOne({ email: email }, (err, user) => {
+  try {
+    const user = await User.findOne({ email: email });
     if (user) {
       res.send({ message: "User Already Registered" });
     } else {
-      //create a new user instance object with 3 details
-      const user = new User({
+      const hashPassword = await bcrypt.hash(password, 10);
+
+      const newUser = new User({
         name: name,
         email: email,
-        password: password,
+        password: hashPassword,
       });
-      user.save((err) => {
-        if (err) {
-          res.send(err);
-        } else {
-          res.send({ message: "User Registered Successfully" });
-        }
-      });
+      await newUser.save();
+      res.send({ message: "User Registered Successfully" });
     }
-  });
+  } catch (error) {
+    res.send({ message: "An error is occurred " + error.message });
+  }
 });
+
+
 
 app.listen(PORT, () => {
   console.log(`App Started at port ${PORT}`);
