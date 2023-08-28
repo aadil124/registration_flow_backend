@@ -3,10 +3,12 @@ import cors from "cors"; //unable all the requests which are coming from differe
 import mongoose from "mongoose"; // to provide high level abstraction
 import dotenv from "dotenv";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 dotenv.config(); // load the environment variables from .env file
 const PORT = process.env.PORT;
 const MONGO_URL = process.env.MONGO_URL;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const app = express();
 // const PORT = 9000;
@@ -66,7 +68,20 @@ app.post("/login", async (req, res) => {
       //first do comparison with hashpassowrd
       const isPasswordValid = await bcrypt.compare(password, user.password);
       if (isPasswordValid) {
-        res.send({ message: "Login Successful", user: user });
+        //generate jwt token
+        const token = jwt.sign(
+          {
+            userId: user._id, //payload
+            userName: user.name,
+            userEmail: user.email,
+          },
+          JWT_SECRET, // secret token taken from .env file
+          {
+            expiresIn: "1h", // setting token expiration time
+          }
+        );
+        // res.send({ message: "Login Successful", user: user });
+        res.send({ message: "Login Successful", user: user, token: token });
       } else {
         res.send({ message: "Password is not matched.." });
       }
