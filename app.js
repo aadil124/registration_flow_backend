@@ -93,6 +93,28 @@ app.post("/login", async (req, res) => {
   }
 });
 
+//code to verify and decoding
+//middleware -> route -> verify token as middleware
+const verifyToken = (req, res, next) => {
+  const token = req.headers["authorization"];
+  if (!token) {
+    return res.status(401).send({ message: "No token provided" });
+  }
+  jwt.verify(token, JWT_SECRET, (decoded,err ) => {
+    if (decoded) {
+      req.userId = decoded.userId;
+       res.send({ message: "Token verified successfully!" });
+    } else {
+      return res.status(403).send({ message: "Failed to authorized token" });
+    }
+    next();
+  });
+};
+
+app.get("/protected", verifyToken, (req, res) => {
+  res.send({ message: "Protected route accessed successfully" });
+});
+
 //create a route for registration
 
 // app.post("/register", (req, res) => {
@@ -142,8 +164,6 @@ app.post("/register", async (req, res) => {
     res.send({ message: "An error is occurred " + error.message });
   }
 });
-
-
 
 app.listen(PORT, () => {
   console.log(`App Started at port ${PORT}`);
