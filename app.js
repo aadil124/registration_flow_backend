@@ -4,19 +4,18 @@ import bcrypt from "bcrypt";
 import cors from 'cors';
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';//high level abstraction
-import jwt from "jsonwebtoken";
-import { createToken, jwtDecode } from './middleware/middleware.js';
+import  { createToken,jwtDecode }  from './middleware/middleware.js';
+import  jwt from 'jsonwebtoken'
+import { sendResetpasswordMail } from './utils/utils.js';
+
 
 dotenv.config();//load the environment variable from .env file
 
 const PORT=process.env.PORT;
 const MONGO_URL=process.env.MONGO_URL;
-const JWT_SECRET=process.env.JWT_SECRET;
 
 //instance of express app
 const app=express();
-// const PORT=9002;
-// const MONGO_URL="mongodb+srv://jainmonula1:8JwnEmYTQlsg2lSe@cluster0.t9mtq4h.mongodb.net/myLoginRegisterDb";
 
 app.use(cors());
 app.use(express.json());
@@ -37,10 +36,10 @@ const userSchema=new mongoose.Schema({
     name:String,
     email:String,
     password:String,
-    forgotToken:{
-        type:String,
-        default:''
-    }
+    forgotToken: {
+        type: String,
+        default: ''
+      }
 })
 
 
@@ -51,78 +50,30 @@ app.get("/",(req,res)=>{
 })
 
 
-//creat a route for Login based on User
-
-// app.post("/login",(req,res)=>{
-//     const {email,password}=req.body;
-
-//     User.findOne({email:email},(err,user)=>{
-//         if(user){
-//             if(password===user.password){
-//                 res.send({message:"Login Successful",user:user})
-//             }else{
-//                 res.send({message:"Password is not matched..."})
-//             }
-//         }else{
-//             res.send({message:"User is not Found."})
-//         }
-//     })
-// })
-
-
-//Implement bcrypt algorithm to compare password and hashedpassword
 app.post("/login",async(req,res)=>{
     const {email,password}=req.body;
     try {
         const user=await User.findOne({email:email});
-    if(user){
-            //first do comparision with hashpassowrd
-    const isPasswordValid=await bcrypt.compare(password,user.password);   
-    if(isPasswordValid){
-        //call the token from middle jwt
-        const jwttoken=await createToken(user.email)
-        res.status(200).send({message:"Login Successful",token:jwttoken})
-     }else{
-        res.send({message:"Password is not matched.."});
-    }
-    
-}else{
-    res.send({message:"User is not found"});
-}
-        
-} catch (error) {
-        res.send({message:"An error occured in login"})
+        if(user){
+            //first do comparison with hashpassowrd
+            const isPasswordValid=await bcrypt.compare(password,user.password);   
+            if(isPasswordValid){
+                const jwttoken = await createToken(user.email)
+                res.status(200).send({message:"Login Successful",token:jwttoken});
+            }else{
+                res.send({message:"Password is not matched.."});
+            }
+        }else{
+            res.send({message:"User is not found"});
+        }
+    } catch (error) {
+        res.send({message:"An error occurred in login"})
     }
 })
   
 
 
 //Create a Route for Registration 
-// app.post('/register',(req,res)=>{
-//     const {name,email,password}=req.body;
-    
-//     User.findOne({email:email},(err,user)=>{
-//         if(user){
-//             res.send({message:"User Already Registered"});
-//         }else{
-//                 //create a new User instance object with 3 details
-//             const user=new User({
-//                 name:name,
-//                 email:email,
-//                 password:password
-//             })
-
-//             user.save((err)=>{
-//                 if(err){
-//                     res.send(err);
-//                 }else{
-//                     res.send({message:"User Registered Successfully"});
-//                 }
-//             })
-
-//         }
-//     })
-// })
 
 
 //code for register route with bcrypt
@@ -131,11 +82,12 @@ app.post("/register",async(req,res)=>{
 
     try {
         const user=await User.findOne({email:email});
+        // console.log(user,"user");
         if(user){
             res.send({message:"User Already Registered"});
         }else{
             const hashPassword=await bcrypt.hash(password,10);
-
+            console.log(hashPassword,"hash");
             const newUser=new User({
                 name:name,
                 email:email,
@@ -145,104 +97,181 @@ app.post("/register",async(req,res)=>{
             res.send({message:"User Registered Successfully"});
         }
     } catch (error) {
+        res.send({message:"An error is occurred " +error.message});
+    }
+})
+
+
+
+
+app.post('/forgotpassword',async (req,res) =>{
+   
+    try {
+        const user=await User.findOne({email:req.body.email});
+    // creating a temporary token for verification
+    console.log(user,"user");
+    if(user !==null){
+        const forgotToken = jwt.sign({email:req.body.email},process.env.JWT_SECRET,{expiresIn:'10m'})
+        const data = await  User.updateOne({email:req.body.email},{$set:{forgotToken:forgotToken}});
+        sendResetpasswordMail(user.name,user.email,forgotToken)
+        res.send({
+         statusCode:200,
+         message:"Please check your email for to reset mail"
+     })
+
+     }else{
+        res.send({
+            message:"Email Not Found"
+        })
+     }
+
+    } catch (error) {
         res.send({message:"An error is occured " +error.message});
     }
 })
 
 
-//Forgot password
-app.post("/forgotpassword",async(req,res)=>{
-       try {
-        //Find the user by email
-        const user=await User.findOne({email:req.body.email});
+//To check token valid or not
+// app.get('/resetpassword/:token', async (req,res)=>{
+   
+//     try {
+//         const UserTokenData = await  User.findOne({forgotToken:req.params.token})
+//         console.log(UserTokenData,"user");
+//         if(UserTokenData !== null){
+//             const decodeJWt = await jwtDecode(UserTokenData.forgotToken);
+//             let currentTime = Math.round(new Date()/1000)// expiry date
+//             if(currentTime<=decodeJWt.exp) {
+//              console.log("hello");
+//               res.send({
+//                   statusbar:200,
+//                   success:true,
+//                   message:"Token verified Successfully",
+                  
+//               })
+//           }
+//           else{
+//           // res.status(400).send({success:true,msg:"Link has been expired"})//
+//             res.send({
+//               statusbar:204,
+//               success:true,
+//               message:"Link has been expired",
+//             })
+    
+//           }
+//       }
+//       else{
+//           // res.status(400).send({success:true,msg:"This link has already used to reset password"})
+//           res.send({
+//           statusbar:204,
+//             success:true,
+//             message:"This link has already used to reset password",
+//           })
+//   }
+//       } catch (error) {
+//           // res.status(400).send({success:false,msg:"Error"})
+//           res.send({
+//             statusbar:204,
+//             success:false,
+//             message:"Error",
+//             error:error
+//           })
+  
+//       }
+// })
 
-        //check if user exist in db or not
-        if(user!=null){
-            //Generate a temporaray token for verfication
-            const forgotToken=jwt.sign({email:req.body.email},process.env.JWT_SECRET,{expiresIn:'2m'});
-            const data=await User.updateOne({email:req.body.email},{$set:{forgotToken:forgotToken}});
-            console.log(data);
-            //send password reset email
-            sendResetpasswordMail(user.name,user.email,forgotToken);
+//Update the password
+// app.post('/newpassword/:token',async (req, res) =>{
+//     try {
+//         const {token} = req.params
+//         const decoded = await jwtDecode(token);
+//         const password = req.body.password
+//         const hashPassword=await bcrypt.hash(password,10);
+//         const user = await User.findOneAndUpdate({email:decoded.email},{$set:{password:hashPassword,forgotToken:""}},{new:true})
+//         res.send({
+//             statusbar:200,
+//             success:true,
+//             message:"Password Updated Successfully",
+//             data:user
+//         })
+        
+//       } catch (error) {
+//         res.send({
+//           statusCode:400,
+//           message:error
+//         })
+//       }
+// })
 
-            //send sucess message
+//To check token valid or not
+app.get('/resetpassword/:token', async (req,res)=>{
+   
+    try {
+        const UserTokenData = await  User.findOne({forgotToken:req.params.token})
+        console.log(UserTokenData,"user");
+        if(UserTokenData !== null){
+            const decodeJWt = await jwtDecode(UserTokenData.forgotToken);
+            let currentTime = Math.round(new Date()/1000)// expiry date
+            if(currentTime<=decodeJWt.exp) {
+             console.log("hello");
+              res.send({
+                  statusbar:200,
+                  success:true,
+                  message:"Token verified Successfully",
+                  
+              })
+          }
+          else{
+          // res.status(400).send({success:true,msg:"Link has been expired"})//
             res.send({
-                data,
-                statusCode:200,
-                message:"Please check your email for the reset password link"
-            })   
-        }else{
-            //send response if user is not found
-            res.send({
-                message:"Email not found"
+              statusbar:204,
+              success:true,
+              message:"Link has been expired",
             })
-        }
-       } catch (error) {
-       }
+    
+          }
+      }
+      else{
+          // res.status(400).send({success:true,msg:"This link has already used to reset password"})
+          res.send({
+          statusbar:204,
+            success:true,
+            message:"This link has already used to reset password",
+          })
+  }
+      } catch (error) {
+          // res.status(400).send({success:false,msg:"Error"})
+          res.send({
+            statusbar:204,
+            success:false,
+            message:"Error",
+            error:error
+          })
+  
+      }
 })
 
-
-
-//Reset password route to check token is valid or not
-app.post("/resetpassword/:token",async(req,res)=>{
+//Update the password
+app.post('/newpassword/:token',async (req, res) =>{
     try {
-        //find the user in database  based on forgot Token
-        const UserTokenData=await User.findOne({forgotToken:req.params.token});
-        console.log(UserTokenData,"user");
-
-
-        //check if UserTokenData data exist or not 
-        if(UserTokenData!=null){
-            //decode the jwt token store in  UserTokenData.forgotToken
-            const decodeJWt=await jwtDecode(UserTokenData.forgotToken);
-
-            //Get the current time in seconds
-            let currentTime=Math.round(new Date()/1000);
-
-            //check if ct<=token expiration time
-
-            if(currentTime<=decodeJWt.exp){
-                console.log("Hello");
-                //if token is valid and not expired
-                res.send({
-                    statusbar:200,
-                    success:true,
-                    message:"Token Verified Successfully."
-                })
-            }else{
-                res.send({
-                    statusbar:204,
-                    success:true,
-                    message:"Link has been expired."
-                })
-            }
-
-        }else{
-            res.send({
-                statusbar:204,
-                success:true,
-                message:"This link is already user to reset password."
-            })
-        }
-        
-    } catch (error) {
+        const {token} = req.params
+        const decoded = await jwtDecode(token);
+        const password = req.body.password
+        const hashPassword=await bcrypt.hash(password,10);
+        const user = await User.findOneAndUpdate({email:decoded.email},{$set:{password:hashPassword,forgotToken:""}},{new:true})
         res.send({
             statusbar:200,
-            success:false,
-            message:"Error.",
-            error:error
+            success:true,
+            message:"Password Updated Successfully",
+            data:user
         })
-    }
-
+        
+      } catch (error) {
+        res.send({
+          statusCode:400,
+          message:error
+        })
+      }
 })
-  
-//newpassword
-app.post("/newpassword/:token",async(req,res)=>{
-
-})
-
-
-//Newpassword
 
 app.listen(PORT,()=>{
     console.log("App Started on Port "+ PORT);
